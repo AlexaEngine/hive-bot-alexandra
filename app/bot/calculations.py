@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 from app.config import MONGO_CLIENT, EQUIPMENT_TYPE_MULTIPLIERS
 
 async def calculate_approximate_rate_quote(load_criteria: dict, update, context):
@@ -19,8 +19,8 @@ async def calculate_approximate_rate_quote(load_criteria: dict, update, context)
         pipeline = [
             {
                 '$match': {
-                    'Shipper city': {'$eq': load_criteria['shipperCity'].upper()},
-                    'Consignee city': {'$eq': load_criteria['consigneeCity'].upper()},
+                    'Shipper city': {'$eq': shipper_city.upper()},
+                    'Consignee city': {'$eq': consignee_city.upper()},
                     'Bill Distance': {'$exists': True, '$ne': None},
                     'Weight': {'$exists': True, '$ne': None}
                 }
@@ -46,12 +46,12 @@ async def calculate_approximate_rate_quote(load_criteria: dict, update, context)
             {
                 '$match': {
                     'normalizedBillDistance': {
-                        '$gte': load_criteria['billDistance'] - distance_tolerance,
-                        '$lte': load_criteria['billDistance'] + distance_tolerance
+                        '$gte': bill_distance - distance_tolerance,
+                        '$lte': bill_distance + distance_tolerance
                     },
                     'normalizedWeight': {
-                        '$gte': load_criteria['weight'] - weight_tolerance,
-                        '$lte': load_criteria['weight'] + weight_tolerance
+                        '$gte': weight - weight_tolerance,
+                        '$lte': weight + weight_tolerance
                     }
                 }
             },
@@ -70,30 +70,31 @@ async def calculate_approximate_rate_quote(load_criteria: dict, update, context)
         result = list(cursor)
         
         if result and 'averageRate' in result[0]:
-            average_rate = float(result[0]['averageRate'].to_decimal()) * 1.06
+            average_rate = float(result[0]['averageRate']) * 1.06
             message = f"The estimated rate based on historically similar loads is: ${average_rate:.2f}"
         else:
-            distance = load_criteria.get("billDistance", 0)
-            equipment_type_code = load_criteria.get("Equipment Type", 'V')
-            multiplier = EQUIPMENT_TYPE_MULTIPLIERS.get(equipment_type_code, 1)
-            base_rate = distance * 1.45 * multiplier
+            raise ValueError("No matching historical data found")
+    
+    except (errors.PyMongoError, ValueError) as e:
+        # If MongoDB fails or no matching data, calculate using the formula
+        base_rate = bill_distance * 1.45 * EQUIPMENT_TYPE_MULTIPLIERS.get(trailer_type, 1)
+        
+        if base_rate < 350:
+            base_rate = 350
             
-            if base_rate < 350:
-                base_rate = 350
+        total_rate = base_rate + (bill_distance * 0.8)
+        
+        if driver_assistance == 'Yes':
+            total_rate += 100
+        if hazmat_routing == 'Yes':
+            total_rate += 200
+        if load_criteria.get("driverAssistance", 'No') == 'Yes':
+            total_rate += 100
+        if load_criteria.get("Tolls", 'No') == 'Yes':
+            total_rate += 50
             
-            total_rate = base_rate + (distance * 0.5)
-            
-            if driver_assistance == 'Yes':
-                total_rate += 100
-            if hazmat_routing == 'Yes':
-                total_rate += 200
-            if load_criteria.get("driverAssistance", 'No') == 'Yes':
-                total_rate += 100
-            if load_criteria.get("Tolls", 'No') == 'Yes':
-                total_rate += 50
-            
-            message = f"Based on my analysis and calculations of the information provided, the estimated rate is: ${total_rate:.2f}"
-            
+        message = f"Based on my analysis and calculations of the information provided, the estimated rate is: ${total_rate:.2f}"
+    
     except Exception as e:
         message = f"Sorry, I couldn't process that rate due to an error: {e}"
         

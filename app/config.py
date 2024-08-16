@@ -1,5 +1,9 @@
 import os
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Environment variables
 FMCSA_API_KEY = os.environ.get('FMCSA_API_KEY')
