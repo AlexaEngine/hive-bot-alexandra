@@ -1,18 +1,18 @@
 import openai
-from app.config import OPENAI_API_KEY
+from app.config import OPENAI_API_KEY, logger
 
 openai.api_key = OPENAI_API_KEY
 
 def get_chatbot_response(prompt):
     try:
-        response = openai.Completion.create(
-            engine="davinci-codex",  # Specify the engine to use (e.g., davinci, curie, etc.)
-            prompt=prompt,
-            max_tokens=150,  # You can adjust the max tokens as needed
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Update to a more current model
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,  # Adjust max tokens as needed
             n=1,
-            stop=None,
             temperature=0.5,
         )
-        return response.choices[0].text.strip()
+        return response.choices[0].message['content'].strip()
     except Exception as e:
-        return f"An error occurred: {e}"
+        logger.error(f"Error during OpenAI API call: {e}")
+        return "Sorry, I'm having trouble processing your request right now. Please try again later."

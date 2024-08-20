@@ -1,9 +1,14 @@
 import openai
 from dotenv import load_dotenv
 import os
+import logging
 
 # Load environment variables from a .env file
 load_dotenv()
+
+# Logging setup
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Retrieve the OpenAI API key from the environment variable
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -25,4 +30,4 @@ try:
     print(response.choices[0].message['content'].strip())
 
 except openai.error.OpenAIError as e:
-    print(f"An error occurred: {e}")
+    logger.error(f"An error occurred with OpenAI API: {e}")

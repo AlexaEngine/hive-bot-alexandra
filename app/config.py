@@ -5,6 +5,14 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Required environment variables
+required_env_vars = ['FMCSA_API_KEY', 'MONGO_CLIENT', 'OPENAI_API_KEY', 'TELEGRAM_API_KEY']
+
+# Check for missing environment variables
+for var in required_env_vars:
+    if not os.getenv(var):
+        raise EnvironmentError(f"Required environment variable {var} is not set. Please check your .env file.")
+
 # Environment variables
 FMCSA_API_KEY = os.environ.get('FMCSA_API_KEY')
 MONGO_CLIENT = os.environ.get('MONGO_CLIENT')

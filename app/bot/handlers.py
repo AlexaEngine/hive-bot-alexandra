@@ -12,9 +12,11 @@ from app.bot.utils import (
 from app.bot.calculations import calculate_approximate_rate_quote
 
 # Define states for conversation handler
-START, ENTER_NUMBER, CONFIRM_COMPANY, AWAITING_RATE_COMMAND, INITIALIZE_RATE_QUOTE, CALCULATING_RATE_QUOTE, POST_RATE_ACTION = range(7)
+(START, ENTER_NUMBER, CONFIRM_COMPANY, AWAITING_RATE_COMMAND, 
+ INITIALIZE_RATE_QUOTE, CALCULATING_RATE_QUOTE, POST_RATE_ACTION) = range(7)
 
 async def start(update: Update, context: CallbackContext) -> int:
+    """Start the bot by checking membership and requesting an MC or DOT number."""
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
 
     if not await check_membership(update, context):
@@ -22,12 +24,14 @@ async def start(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
     
     await update.message.reply_text(
-        "Hi, thanks for being a member of Hive Engine Logistics and welcome to our Hive-Bot! Please enter your MC or DOT number (e.g., 'MC 123456' or 'DOT 654321') to get started.",
+        "Hi, thanks for being a member of Hive Engine Logistics and welcome to our Hive-Bot! "
+        "Please enter your MC or DOT number (e.g., 'MC 123456' or 'DOT 654321') to get started.",
         reply_markup=ReplyKeyboardRemove(),
     )
     return ENTER_NUMBER
 
 async def enter_number(update: Update, context: CallbackContext) -> int:
+    """Verify the MC/DOT number provided by the user."""
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
     try:
@@ -40,7 +44,9 @@ async def enter_number(update: Update, context: CallbackContext) -> int:
     
     if response['status'] == 'verified':
         context.user_data['company_details'] = response['data']
-        company_name = response['data']['carrier']['legalName'] or response['data']['carrier']['dbaName']
+        company_name = response['data']['carrier'].get('legalName') or response['data']['carrier'].get('dbaName', 'Unknown Company')
+        
+        # Confirm the user's company
         reply_keyboard = [['YES', 'NO']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
         await update.message.reply_text(f"Is {company_name} your company?", reply_markup=markup)
@@ -48,16 +54,26 @@ async def enter_number(update: Update, context: CallbackContext) -> int:
     else:
         await update.message.reply_text("Your MC/DOT number could not be verified. Please try again.")
         return ENTER_NUMBER
+    
+    async def handle_verification_failure(update: Update, response):
+        """Handle the case where the MC/DOT number verification fails."""
+        if response and response['status'] == 'not_verified':
+            message = "Your MC/DOT number could not be verified. Please try again or contact support."
+        else:
+            message = "I couldn't verify your MC/DOT number. Please try again."
+
 
 async def confirm_company(update: Update, context: CallbackContext) -> int:
+    """Handle company confirmation and display available commands if verified."""
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+    
     user_response = update.message.text.strip().upper()
     if user_response == 'YES':
         await update.message.reply_text(
-            "Your MC/DOT number is verified. You can now use the following commands:\n/help - See available commands.",
+            "Your MC/DOT number is verified. You can now use the following commands:\n"
+            "/help - See available commands.",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Automatically show the /help message
         await help_command(update, context)
         return ConversationHandler.END
     else:
@@ -65,15 +81,23 @@ async def confirm_company(update: Update, context: CallbackContext) -> int:
         return ENTER_NUMBER
 
 async def rate_quote(update: Update, context: CallbackContext) -> int:
+    """Request details for calculating a rate quote."""
+    logger.info("rate_quote function invoked")  # Logging function invocation
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+    
     await context.bot.send_message(
-        chat_id= update.effective_chat.id,
-        text="Sure, let's calculate a rate quote. Please provide these details about the load: shipper city, consignee city, distance, weight, equipment type, hazmat (yes/no), number of extra stops, and driver assistance (yes/no).",
+        chat_id=update.effective_chat.id,
+        text="Sure, let's calculate a rate quote. Please provide the following details: shipper city, consignee city, distance, weight, equipment type, hazmat (yes/no), number of extra stops, and driver assistance (yes/no).",
         reply_markup=ReplyKeyboardRemove(),
     )
+    
+    # Prepare to receive the next user input
     context.user_data['rate_quote_info'] = {}
-    return INITIALIZE_RATE_QUOTE
+    return INITIALIZE_RATE_QUOTE  # Transition to the next state
 
 async def extract_and_calculate_rate_quote(update: Update, context: CallbackContext) -> int:
+    """Extract load criteria and calculate the rate quote based on user input."""
+    logger.info("extract_and_calculate_rate_quote function invoked")  # Logging function invocation
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
     load_criteria = await extract_initial_load_criteria(update, context)
@@ -93,10 +117,10 @@ async def extract_and_calculate_rate_quote(update: Update, context: CallbackCont
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"The estimated rate is: {rate_quote}")
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Please provide your feedback on the quote or let me know if you want to request another quote or switch to conversational mode.")
-
     return POST_RATE_ACTION
 
 async def post_rate_action(update: Update, context: CallbackContext) -> int:
+    """Handle post-quote user actions."""
     user_response = update.message.text.strip().upper()
     if user_response == 'YES':
         await update.message.reply_text(
@@ -111,16 +135,13 @@ async def post_rate_action(update: Update, context: CallbackContext) -> int:
         await update.message.reply_text("Have another load to quote? Please reply with 'Yes' to continue or 'No' to exit.")
         return POST_RATE_ACTION
 
-def error_handler(update: Update, context: CallbackContext):
-    logger.warning(f'Update "{update}" caused error "{context.error}"')
-    context.bot.send_message(chat_id=update.effective_chat.id, text="An error occurred. Please try again or type '/cancel' to restart.")
-    return POST_RATE_ACTION
-
 async def cancel(update: Update, context: CallbackContext) -> int:
+    """Cancel the current operation."""
     await update.message.reply_text('Operation cancelled.', reply_markup=ReplyKeyboardRemove())
     return AWAITING_RATE_COMMAND
 
 async def help_command(update: Update, context: CallbackContext):
+    """Display help text with available bot commands."""
     help_text = (
         "/start - Start the bot and verify your MC/DOT number.\n"
         "/rate - Request a rate quote for a load.\n"
@@ -131,6 +152,7 @@ async def help_command(update: Update, context: CallbackContext):
     await update.message.reply_text(help_text)
 
 async def lookup(update: Update, context: CallbackContext):
+    """Look up the safety rating of a company by MC or DOT number."""
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
     try:
@@ -148,3 +170,8 @@ async def lookup(update: Update, context: CallbackContext):
             await update.message.reply_text("Your MC/DOT number could not be verified. Please try again.")
     except ValueError:
         await update.message.reply_text("Please provide a valid number in the format: '/lookup MC 123456' or '/lookup DOT 654321'.")
+
+def error_handler(update: Update, context: CallbackContext):
+    """Log errors and send an error message to the user."""
+    logger.warning(f'Update "{update}" caused error "{context.error}"')
+    context.bot.send_message(chat_id=update.effective_chat.id, text="An error occurred. Please try again or type '/cancel' to restart.")
