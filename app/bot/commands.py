@@ -1,5 +1,5 @@
 from telegram.ext import CommandHandler, ConversationHandler, MessageHandler, filters
-from app.bot.handlers import start, rate_quote, help_command, cancel
+from app.bot.handlers import start, rate_quote, help_command, cancel, extract_and_calculate_rate_quote, post_rate_action
 from app.bot.lookup import lookup_start, lookup_process, cancel_lookup
 
 def add_command_handlers(dispatcher):
@@ -13,7 +13,7 @@ def add_command_handlers(dispatcher):
     lookup_handler = ConversationHandler(
         entry_points=[CommandHandler('lookup', lookup_start)],
         states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, lookup_process)],
+            LOOKUP_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, lookup_process)],
         },
         fallbacks=[CommandHandler('cancel', cancel_lookup)],
     )

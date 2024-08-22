@@ -1,14 +1,16 @@
 import openai
 from app.config import OPENAI_API_KEY, logger
 
+# Set the OpenAI API key
 openai.api_key = OPENAI_API_KEY
 
-def get_chatbot_response(prompt):
+async def get_chatbot_response(prompt):
+    """Get a response from the GPT model based on the provided prompt."""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Update to a more current model
+            model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=150,  # Adjust max tokens as needed
+            max_tokens=150,
             n=1,
             temperature=0.5,
         )

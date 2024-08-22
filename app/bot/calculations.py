@@ -76,17 +76,12 @@ async def calculate_approximate_rate_quote(load_criteria: dict, update, context)
     
     except (errors.PyMongoError, ValueError) as e:
         # If MongoDB fails or no matching data, calculate using the formula
+        logger.error(f"MongoDB error or no data found: {e}")
+        
         equipment_base_rate = {
             'V': 1.45,   # Van
             'R': 1.60,   # Reefer
             'F': 1.75,   # Flatbed
-            'VR': 1.70,  # Van/Reefer
-            'FT': 1.80,  # Flatbed with Tarps
-            'FR': 1.85,  # Flatbed with Reefer
-            'F/FT': 1.90,# Flatbed with Tarps
-            'F/R': 1.95, # Flatbed with Reefer
-            'D': 1.50,   # Dry van
-            'P': 1.65    # Power only
         }
 
         base_rate = bill_distance * equipment_base_rate.get(trailer_type, 1.45)  # Default to 1.45 if unknown
